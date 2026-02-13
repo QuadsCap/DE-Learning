@@ -1,0 +1,37 @@
+# docker-compose.yml
+# This file is a "recipe" for Docker.
+# It tells Docker how to run a Postgres database for this project.
+
+services:
+  postgres:
+    # Which container image to use (PostgreSQL version 16)
+    image: postgres:16
+
+    # A friendly name for the running container (so it's easy to find in Docker Desktop)
+    container_name: De_Learning_postgres
+
+    # Automatically restart Postgres if your PC reboots (unless you manually stopped it)
+    restart: unless-stopped
+
+    # Load environment variables from the .env file in this repo root
+    # (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT)
+    env_file:
+      - .env
+
+    # Port mapping:
+    # LEFT side = port on your computer (from .env)
+    # RIGHT side = port inside the container (Postgres always listens on 5432)
+    # Example: if POSTGRES_PORT=5432, then it becomes 5432:5432
+    ports:
+      - "${POSTGRES_PORT}:5432"
+
+    # Volume mapping:
+    # This makes your database data persist even if the container is stopped/removed.
+    # Postgres stores data inside the container at /var/lib/postgresql/data
+    volumes:
+      - De_Learning_pgdata:/var/lib/postgresql/data
+
+# Define the named volume used above
+volumes:
+  De_Learning_pgdata:
+  
