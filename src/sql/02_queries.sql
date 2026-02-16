@@ -27,3 +27,11 @@ SELECT
   (close / LAG(close) OVER (PARTITION BY symbol ORDER BY date) - 1) AS daily_return
 FROM raw.prices_daily
 ORDER BY symbol, date;
+
+-- Count rows again
+
+SELECT COUNT(*) AS row_count FROM raw.prices_daily;
+
+SELECT *
+FROM raw.prices_daily
+ORDER BY symbol, date;
