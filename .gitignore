@@ -8,6 +8,8 @@ __pycache__/
 
 # Not posting to Github
 .env
+notes/private/
+
 
 # Distribution / packaging
 .Python

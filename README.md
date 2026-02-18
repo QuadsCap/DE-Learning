@@ -110,3 +110,19 @@ Then re-activate:
 -Make sure Docker is running and the container is up (docker ps)
 -Confirm host/port match docker-compose.yml
 -Confirm .env matches your DBbeaver connection
+
+## Run the pipeline (recommended)
+This project supports automated ingestion + verification (no manual DBeaver import required):
+
+```powershell
+.\run_pipeline.ps1
+
+
+Verification in Dbbeaver
+
+SELECT COUNT(*) FROM raw.prices_daily;
+
+SELECT symbol, MAX(date) AS latest_date
+FROM raw.prices_daily
+GROUP BY symbol
+ORDER BY symbol;

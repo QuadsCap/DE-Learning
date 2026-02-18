@@ -4,61 +4,75 @@
 # - Insert those rows into Postgres table raw.prices_daily
 # - Make it "repeatable": each run reloads the table cleanly (TRUNCATE + INSERT)
 
-import os
-import pandas as pd                 # Used to read CSV easily
-from dotenv import load_dotenv      # Loads .env file into environment variables
-from db import get_conn             # Our connection helper from db.py
+
+#What this script does:
+#1) Reads the CSV into a pandas DataFrame
+#2) Validates required columns exist: date, symbol, close
+#3) Parses the date column into a proper date type
+#4) TRUNCATES (clears) the destination table to avoid duplicate loads
+#5) Inserts the data into raw.prices_daily
+#6) Prints a success message with number of rows loaded
+
+#Prerequisites:
+#- Docker Postgres is running: docker compose up -d
+#- Table exists: raw.prices_daily (created via your SQL script in DBeaver)
+#- CSV exists at: data/prices_daily.csv
+#- Python packages installed:
+#  pip install pandas sqlalchemy psycopg2-binary python-dotenv
+#"""
+
+import pandas as pd
+from db import get_engine
+
+# Path to your CSV relative to repo root
+CSV_PATH = "data/prices_daily.csv"
 
 
 def main():
-    # 1) Load environment variables from .env into the process environment
-    #    This is how the script learns PGHOST, PGUSER, etc.
-    load_dotenv()
+    # 1) Create DB engine (reads .env)
+    engine = get_engine()
 
-    # 2) Define where the CSV file is located (relative to repo root)
-    csv_path = os.path.join("data", "prices_daily.csv")
+    # 2) Read CSV
+    df = pd.read_csv(CSV_PATH)
 
-    # 3) Read CSV into a pandas DataFrame (like an in-memory table)
-    df = pd.read_csv(csv_path)
+    # 3) Validate CSV structure (fail early with clear message)
+    required_cols = {"date", "symbol", "close"}
+    if not required_cols.issubset(df.columns):
+        raise ValueError(
+            f"CSV must contain columns {required_cols}. "
+            f"Found columns: {set(df.columns)}"
+        )
 
-    # 4) Convert the date string column into actual date objects
-    #    Postgres expects a date type, not "2026-02-01" as text.
-    df["date"] = pd.to_datetime(df["date"]).dt.date
+    # 4) Parse and standardize types
+    #    Convert date strings (YYYY-MM-DD) into Python date objects
+    df["date"] = pd.to_datetime(df["date"], format="%Y-%m-%d").dt.date
 
-    # 5) Convert the DataFrame into a list of tuples for fast insertion.
-    #    Each tuple matches the INSERT statement order: (date, symbol, close)
-    rows = [
-        (r["date"], r["symbol"], float(r["close"]))
-        for r in df.to_dict("records")
-    ]
+    # 5) Load to Postgres in a transaction (engine.begin() auto-commits if successful)
+    with engine.begin() as conn:
+        # 5a) Clear destination table so rerunning script doesn't duplicate rows
+        conn.exec_driver_sql("TRUNCATE TABLE raw.prices_daily;")
 
-    # 6) Open a database connection using our helper
-    #    "with" ensures the connection closes cleanly even if something fails.
-    with get_conn() as conn:
-        # 7) Open a cursor (cursor = the thing that runs SQL statements)
-        with conn.cursor() as cur:
-            # 8) TRUNCATE clears the table quickly
-            #    This makes the script repeatable for learning:
-            #    each run starts fresh and loads exactly what's in the CSV.
-            cur.execute("TRUNCATE TABLE raw.prices_daily;")
+        # 5b) Append all rows from DataFrame into raw.prices_daily
+        #     schema="raw" tells pandas which schema the table is in
+        #     if_exists="append" means insert rows into existing table
+        df.to_sql(
+            name="prices_daily",
+            schema="raw",
+            con=conn,
+            if_exists="append",
+            index=False,
+            method="multi"  # faster inserts
+        )
 
-            # 9) Insert all rows in one call (executemany is efficient)
-            cur.executemany(
-                """
-                INSERT INTO raw.prices_daily (date, symbol, close)
-                VALUES (%s, %s, %s);
-                """,
-                rows,
-            )
-
-        # 10) Commit saves the changes (TRUNCATE + INSERT) to the database
-        conn.commit()
-
-    # 11) Print a success message so you know the script worked
-    print(f"Inserted {len(rows)} rows into raw.prices_daily")
+    # 6) Print a clear success message
+    print(f"OK: Loaded {len(df)} rows into raw.prices_daily from {CSV_PATH}")
 
 
 if __name__ == "__main__":
-    # This line means: only run main() when executing this file directly:
-    # python src/python/ingest_prices.py
+    r"""How to run (from repo root):
+    - Activate venv:
+        .\.venv\Scripts\activate
+    - Run:
+        python src\python\ingest_prices.py
+    """
     main()
